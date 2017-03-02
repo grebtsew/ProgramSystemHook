@@ -34,69 +34,74 @@ namespace ProgramUsage
         const uint EVENT_OBJECT_NAMECHANGE = 0x800C;
         const uint WINEVENT_OUTOFCONTEXT = 0;
 
+        internal static Form1 main;
+        SynchronizationContext ctx;
 
-        // Need to ensure delegate is not collected while we're using it,
-        // storing it in a class field is simplest way to do this.
         static WinEventDelegate procDelegate = new WinEventDelegate(WinEventProc);
 
-        Boolean shift = false;
-        Boolean first2 = true;
-        Boolean mouse = false;
-        Boolean windows = false;
-        Boolean keyboard = false;
-        Boolean first = true;
-        Boolean first3 = true;
-        Boolean programs = false;
+        Thread SaveListenThread;
+        Thread ProgramListenThread;
+        public Label label;
+        public Label l2;
+
+        bool first = true;
+        bool first2 = true;
+        bool save = false;
+        bool mouse = false;
+        bool windows = false;
+        bool keyboard = false;
+        bool programs = false;
+
+        public RichTextBox rtb;
+
+        SaveLog sl;
         IntPtr hhook;
+        ProgramCheck pc;
 
         public Form1()
         {
      
             InitializeComponent();
-
-           
+            trackBar1.Value = 5;
+            trackBar2.Value = 120;
+            main = this;
+            rtb = richTextBox1;
+            richTextBox1.ReadOnly = true;
         }
 
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            gHook.unhook();
+            MouseHook.stop();
+            UnhookWinEvent(hhook);
+            pc.stop();
+        }
 
-       
- 
-
-    
-      
-    private void Form1_Load_1(object sender, EventArgs e)
+        private void Form1_Load_1(object sender, EventArgs e)
     {
-            
+            sl = new SaveLog();
+            label = label4;
+            l2 = label8;
+            ctx = SynchronizationContext.Current;
+            pc = new ProgramCheck(this);
 
-            
-
-    
-        gHook = new GlobalKeyboardHook(); // Create a new GlobalKeyboardHook
+            gHook = new GlobalKeyboardHook(); // Create a new GlobalKeyboardHook
                                               // Declare a KeyDown Event
             gHook.KeyDown += new KeyEventHandler(gHook_KeyDown);
 
-            // Add the keys you want to hook to the HookedKeys list
-  
 
+            // Add the keys you want to hook to the HookedKeys list
             foreach (Keys key in Enum.GetValues(typeof(Keys))) { 
-        
             gHook.HookedKeys.Add(key);
         }
+
         }
 
-      
-    
-
-    // Handle the KeyDown Event
-    public void gHook_KeyDown(object sender, KeyEventArgs e)
+        public void gHook_KeyDown(object sender, KeyEventArgs e)
         {
             // keyboard
          appendText("Keypress identified :\t" + e.KeyCode + " " + "\t Key number : " + e.KeyValue);
-
-           
         }
-
-
-    
 
         private void richTextBox1_TextChanged(object sender, EventArgs e)
         {
@@ -105,41 +110,75 @@ namespace ProgramUsage
             richTextBox1.ScrollToCaret();
         }
 
-
-        private void appendText( String s)
+        delegate void AppendTextDelegate(string text);
+        public void appendText( string s)
         {
-            richTextBox1.AppendText(s+ "\t Time : " + string.Format("{0:HH:mm:ss tt}", DateTime.Now) + "\t" + DateTime.Today.ToString("d") + "\n");
+            if (richTextBox1.InvokeRequired)
+            {
+                richTextBox1.Invoke(new AppendTextDelegate(this.appendText), new object[] { s  });
+            }
+            else
+            {
+                richTextBox1.Text += s + "\t Time : " + string.Format("{0:HH:mm:ss tt}", DateTime.Now) + "\t" + DateTime.Today.ToString("d") + Environment.NewLine;
+            }
         }
 
+        delegate void clearTextDelegate();
+        public void clearText()
+        {
+            if (richTextBox1.InvokeRequired)
+            {
+                richTextBox1.Invoke(new clearTextDelegate(this.clearText));
+            }
+            else
+            {
+                richTextBox1.Text = "";
+            }
+        }
+
+        delegate string getRichTextDelegate();
+        public string getRichText()
+        {
+
+            if (richTextBox1.InvokeRequired)
+            {
+            return richTextBox1.Invoke(new getRichTextDelegate(this.getRichText)).ToString();
+            }
+            else
+            {
+             return  richTextBox1.Text;
+            }
+
+        }
 
         private void button1_Click_1(object sender, EventArgs e)
         {
             if (keyboard)
             {
+                appendText(" ----- KeyBoard Hook Closed -----");
                 keyboard = false;
                 gHook.unhook();
                 button1.BackColor = Color.Red; 
             } else
             {
+                appendText(" ----- KeyBoard Hook Active -----");
                 keyboard = true;
                 gHook.hook();
                 button1.BackColor = Color.Green;
             }
-            
-            
         }
-
-     
+ 
         private void button3_Click(object sender, EventArgs e)
         {
-
             if (mouse)
             {
+                appendText(" ----- Mouse Hook Closed -----");
                 MouseHook.stop();
                 mouse = false;
                 button3.BackColor = Color.Red;
             } else
             {
+                appendText(" ----- Mouse Hook Active -----");
                 mouse = true;
 
                 MouseHook.Start();
@@ -148,10 +187,7 @@ namespace ProgramUsage
                 MouseHook.MouseAction += new EventHandler(Event);
                 }
                 button3.BackColor = Color.Green;
-               
-
             }
- 
         }
 
         private void Event(object sender, EventArgs e) {
@@ -186,25 +222,19 @@ namespace ProgramUsage
             }
  
         }
-
-        
+      
         private void button4_Click(object sender, EventArgs e)
         {
-
-            appendText2(" ------  All Running Programs ------");
+            appendText(" ------  All Running Programs ------");
             // active programs
             Process[] processes = Process.GetProcesses();
             foreach (Process p in processes)
             {
                 if (!String.IsNullOrEmpty(p.MainWindowTitle))
                 {
-                 
-                    appendText2("Name: " + p.MainWindowTitle + "\t\t StartTime: " + p.StartTime + "\t ProcessorTime: " + p.TotalProcessorTime + "\t VMsize: " + p.VirtualMemorySize + "\t PMsize: " + p.WorkingSet);
+                    appendText("Name: " + p.MainWindowTitle + "\t\t StartTime: " + p.StartTime +"\t ProcessName : "+p.ProcessName+ "\t ProcessorTime: " + p.TotalProcessorTime + "\t VMsize: " + p.VirtualMemorySize + "\t PMsize: " + p.WorkingSet);
                 }
             }
-
-
-            
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -213,12 +243,12 @@ namespace ProgramUsage
             // get list of Windows services
             ServiceController[] services = ServiceController.GetServices();
 
-            appendText2(" ------  All Services ------");
+            appendText(" ------  All Services ------");
 
             // try to find service name
             foreach (ServiceController service in services)
             {
-                appendText2("Name: " + service.DisplayName + " Type: " + service.ServiceType + " Status: " +service.Status + " Depend: " + service.ServicesDependedOn);
+                appendText("Name: " + service.DisplayName + " Type: " + service.ServiceType + " Status: " +service.Status + " Depend: " + service.ServicesDependedOn);
                 
             }
         }
@@ -232,12 +262,12 @@ namespace ProgramUsage
                 UnhookWinEvent(hhook);
                 windows = false;
                 button5.BackColor = Color.Red;
-                appendText2("-----  Windows hook Ended ------");
+                appendText("-----  Windows hook Ended ------");
             }
             else
             {
                 windows = true;
-                appendText2("----- Starting Windows hook ------");
+                appendText("----- Starting Windows hook ------");
                 // Listen for name change changes across all processes/threads on current desktop...
                 hhook = SetWinEventHook(EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE, IntPtr.Zero,
                         procDelegate, 0, 0, WINEVENT_OUTOFCONTEXT);
@@ -254,13 +284,11 @@ namespace ProgramUsage
                 button5.BackColor = Color.Green;
 
             }
-
         }
 
         private void updateWindowsText(object sender, EventArgs e)
         {
-            appendText2(sender.ToString());
-            
+            appendText(sender.ToString());    
         }
 
         public static event EventHandler WindowsAction = delegate { };
@@ -268,23 +296,7 @@ namespace ProgramUsage
         static void WinEventProc(IntPtr hWinEventHook, uint eventType,
            IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-
-            WindowsAction("Event: " +eventType + " Thread: " + dwEventThread.ToString() + " HWND: " + hwnd.ToString() + " OBJECT: " + idObject.ToString() + " CHILD: " + idChild.ToString() + " TIME: " + dwmsEventTime.ToString(), new EventArgs());
-            
-        }
-
-    
-        private void appendText2(String s)
-        {
-            richTextBox2.AppendText(s +"\t" + "\n");
-
-        }
-
-        private void richTextBox2_TextChanged(object sender, EventArgs e)
-        {
-            richTextBox2.SelectionStart = richTextBox2.Text.Length;
-     
-            richTextBox2.ScrollToCaret();
+            WindowsAction("Windows Event detected : " + " Event: " +eventType + " Thread: " + dwEventThread.ToString() + " HWND: " + hwnd.ToString() + " OBJECT: " + idObject.ToString() + " CHILD: " + idChild.ToString() + " TIME: " + dwmsEventTime.ToString(), new EventArgs());  
         }
 
         private void button6_Click(object sender, EventArgs e)
@@ -293,38 +305,14 @@ namespace ProgramUsage
             // get list of Windows services
             ServiceController[] services = ServiceController.GetServices();
 
-            appendText2(" ------  All None Stopped Services ------");
+            appendText(" ------  All None Stopped Services ------");
 
             // try to find service name
             foreach (ServiceController service in services)
             {
                 if (service.Status != ServiceControllerStatus.Stopped) {
-                appendText2("Name: " + service.DisplayName + "\t\t Type: " + service.ServiceType + "\t Status: " + service.Status + "\t ServiceName: " + service.ServiceName);
+                appendText("Name: " + service.DisplayName + "\t\t Type: " + service.ServiceType + "\t Status: " + service.Status + "\t ServiceName: " + service.ServiceName);
                 }
-            }
-        }
-
-        private void button7_Click(object sender, EventArgs e)
-        {
-                if (programs)
-            {
-                MouseHook.stop();
-                programs = false;
-                button7.BackColor = Color.Red;
-            }
-            else
-            {
-                programs = true;
-                button7.BackColor = Color.Green;
-                MouseHook.Start();
-                if (first3)
-                {
-                    first3 = false;
-                    WatchPrograms();
-                }
-           
-
-
             }
         }
 
@@ -334,12 +322,13 @@ namespace ProgramUsage
             {
                 //appendText2(pd.Name + " " + pd.Type + " " + pd.Value);
                 Console.WriteLine(pd.Name + " " + pd.Type + " " + pd.Value);
-                pd.
+                
             }
         }
 
         private void WatchPrograms()
         {
+            
             ManagementEventWatcher w = new ManagementEventWatcher();
             WqlEventQuery query = new WqlEventQuery("__InstanceCreationEvent",
             new TimeSpan(0, 0, 1),
@@ -363,9 +352,135 @@ namespace ProgramUsage
                 w.Stop();
             }
         }
+
+        private void trackBar1_Scroll(object sender, EventArgs e)
+        {
+            label1.Text = trackBar1.Value.ToString();
+            pc.setSleeptime(trackBar1.Value * 1000);
+        }
+
+        private void button8_Click(object sender, EventArgs e)
+        {
+            
+            if (programs)
+            {
+                appendText("----- Listen to program actvites stopped -----");
+                pc.stop();
+                timer1.Stop();
+                ProgramListenThread.Abort();
+                programs = false;
+                button8.BackColor = Color.Red;
+            }
+            else
+            {
+                appendText("----- Listen to program actvites active -----");
+                programs = true;
+                button8.BackColor = Color.Green;
+                ProgramListenThread = new Thread(new ThreadStart(pc.start));
+                ProgramListenThread.IsBackground = true;
+                timer1.Start();
+                ProgramListenThread.Start();
+                
+            }
+        }
+
+        private void button7_Click(object sender, EventArgs e)
+        {
+            richTextBox1.Text = "";
+        }
+
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            int i = Int32.Parse(label4.Text);
+                label4.Text =  (i - 1).ToString();
+        }
+
+        private void label4_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        delegate void ChangeLabelDelegate(string text);
+
+        public void ChangeLabel(String s)
+        {
+            if (label4.InvokeRequired)
+            {
+                label4.Invoke(new ChangeLabelDelegate(this.ChangeLabel), new object[] { s });
+            }
+            else
+            {
+                label4.Text = s;
+            }
+        }
+
+        delegate void ChangeLabelDelegate2(string text);
+
+        public void ChangeLabel2(String s)
+        {
+            if (l2.InvokeRequired)
+            {
+                l2.Invoke(new ChangeLabelDelegate2(this.ChangeLabel2), new object[] { s });
+            }
+            else
+            {
+                l2.Text = s;
+            }
+        }
+
+        private void button9_Click(object sender, EventArgs e)
+        {
+            if (save)
+            {
+                appendText("----- Write Data to File Stopped -----");
+                sl.stop();
+                timer2.Stop();
+                SaveListenThread.Abort();
+                save = false;
+                button9.BackColor = Color.Red;
+            }
+            else
+            {
+                appendText("----- Write Data to File Started -----");
+                save = true;
+                button9.BackColor = Color.Green;
+                label8.Text = label5.Text;
+                timer2.Start();
+
+                SaveListenThread = new Thread(new ThreadStart(sl.start));
+                SaveListenThread.IsBackground = true;
+                SaveListenThread.Start();
+
+            }
+        }
+
+        private void trackBar2_Scroll(object sender, EventArgs e)
+        {
+            label5.Text = trackBar2.Value.ToString();
+            sl.setSleepTime(trackBar2.Value);
+        }
+
+        private void label5_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void label1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void timer2_Tick(object sender, EventArgs e)
+        {
+            int i = Int32.Parse(l2.Text);
+            l2.Text = (i - 1).ToString();
+        }
+
+        private void button10_Click(object sender, EventArgs e)
+        {
+            sl.clearDayLog();
+        }
     }
-
-
 
 }
 
