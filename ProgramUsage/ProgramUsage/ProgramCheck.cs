@@ -1,12 +1,20 @@
-﻿using System;
+﻿
+using SHDocVw;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using NDde.Client;
 using System.Windows.Forms;
+using System.Windows.Automation;
+using System.Text.RegularExpressions;
+
 namespace ProgramUsage
 {
 
@@ -16,11 +24,39 @@ namespace ProgramUsage
         List<Process> temp = new List<Process>();
         List<Process> remove = new List<Process>();
 
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr FindWindowEx(IntPtr parentHandle,
+    IntPtr childAfter, string className, IntPtr windowTitle);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern int SendMessage(IntPtr hWnd,
+            int msg, int wParam, StringBuilder ClassName);
+
         int sleepTime = 5000;
         bool first = true;
         bool r = true;
         bool changed;
         bool found;
+
+        [System.Runtime.InteropServices.DllImportAttribute("user32.dll", EntryPoint = "FindWindow", SetLastError = true)]
+        static extern IntPtr FindWindowByCaption(IntPtr ZeroOnly);
+
+        private static string GetURL(IntPtr intPtr, string programName, out string url)
+        {
+            string temp = null;
+
+            if (programName.Equals("firefox"))
+            {
+                DdeClient dde = new DdeClient("Firefox", "WWW_GetWindowInfo");
+                dde.Connect();
+                string url1 = dde.Request("URL", int.MaxValue);
+                dde.Disconnect();
+                temp = url1;
+            }
+            
+                    url = temp;
+            return temp;
+        }
 
         public ProgramCheck(Form1 _form)
         {
@@ -37,9 +73,10 @@ namespace ProgramUsage
             if (!String.IsNullOrEmpty(p.MainWindowTitle))
             {
                 if (t)
-                {
-                     Form1.main.appendText("Program Start Detected : "+ "Name: " + p.MainWindowTitle + "\t\t ProcessName : " + p.ProcessName + "\t StartTime: " + p.StartTime + "\t ProcessorTime: " + p.TotalProcessorTime );
+                {                  
+                     Form1.main.appendText("Program Start Detected : "  + "Name: " + p.MainWindowTitle + "\t\t ProcessName : " + p.ProcessName + "\t StartTime: " + p.StartTime + "\t ProcessorTime: " + p.TotalProcessorTime );
                 }
+
                 else
                 {
                     Form1.main.appendText("Program Stop Detected : " + "Name: " + p.ToString());
@@ -143,6 +180,7 @@ namespace ProgramUsage
                     {
                         if (c.MainWindowTitle == p.MainWindowTitle)
                         {
+                           
                             found = false;
                             break;
                         }

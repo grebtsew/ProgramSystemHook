@@ -14,6 +14,10 @@ using System.Windows;
 using System.Threading;
 using System.Management;
 using System.Management.Instrumentation;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Permissions;
+using System.IO;
 
 namespace ProgramUsage
 {
@@ -34,16 +38,23 @@ namespace ProgramUsage
         const uint EVENT_OBJECT_NAMECHANGE = 0x800C;
         const uint WINEVENT_OUTOFCONTEXT = 0;
 
+        PreformanceCheck pcc;
+       public TimeSpan elapsedTime;
+
         internal static Form1 main;
         SynchronizationContext ctx;
 
         static WinEventDelegate procDelegate = new WinEventDelegate(WinEventProc);
 
+        Thread PreformanceThread;
         Thread SaveListenThread;
         Thread ProgramListenThread;
         public Label label;
         public Label l2;
 
+        public static DateTime StartTime = DateTime.Now;
+
+        bool createremove = false;
         bool first = true;
         bool first2 = true;
         bool save = false;
@@ -51,13 +62,20 @@ namespace ProgramUsage
         bool windows = false;
         bool keyboard = false;
         bool programs = false;
+         bool first3 = true;
+        bool preformance = false;
+
+        TextBox tb;
 
         public RichTextBox rtb;
+
+        
 
         SaveLog sl;
         IntPtr hhook;
         ProgramCheck pc;
 
+        
         public Form1()
         {
      
@@ -67,6 +85,9 @@ namespace ProgramUsage
             main = this;
             rtb = richTextBox1;
             richTextBox1.ReadOnly = true;
+            tb = textBox1;
+            pcc = new PreformanceCheck();
+            timer3.Start();
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -77,8 +98,13 @@ namespace ProgramUsage
             pc.stop();
         }
 
+        
+       
+
         private void Form1_Load_1(object sender, EventArgs e)
     {
+            HttpListener hl = new HttpListener();
+
             sl = new SaveLog();
             label = label4;
             l2 = label8;
@@ -479,6 +505,123 @@ namespace ProgramUsage
         private void button10_Click(object sender, EventArgs e)
         {
             sl.clearDayLog();
+        }
+
+        [PermissionSet(SecurityAction.Demand, Name = "FullTrust")]
+        public static void FileSysHook(Form1 f)
+        {
+            string args = main.tb.Text;
+
+            // If a directory is not specified, exit program.
+            if (string.IsNullOrEmpty(args))
+            {
+                // Display the proper way to call the program.
+                Console.WriteLine("Usage: Watcher.exe (directory)");
+                return;
+            }
+
+            // Create a new FileSystemWatcher and set its properties.
+            FileSystemWatcher watcher = new FileSystemWatcher();
+            watcher.Path = args;
+            /* Watch for changes in LastAccess and LastWrite times, and
+               the renaming of files or directories. */
+            watcher.NotifyFilter = NotifyFilters.LastAccess | NotifyFilters.LastWrite
+               | NotifyFilters.FileName | NotifyFilters.DirectoryName;
+            // Only watch text files.
+          //  watcher.Filter = "*.txt";
+
+            if (f.first3) {
+                f.first3 = false;
+            // Add event handlers.
+            watcher.Changed += new FileSystemEventHandler(OnChanged);
+            watcher.Created += new FileSystemEventHandler(OnChanged);
+            watcher.Deleted += new FileSystemEventHandler(OnChanged);
+            watcher.Renamed += new RenamedEventHandler(OnRenamed);
+            }
+            // Begin watching.
+            watcher.EnableRaisingEvents = true;
+
+            // Wait for the user to quit the program.
+         //   Console.WriteLine("Press \'q\' to quit the sample.");
+          //  while (Console.Read() != 'q') ;
+        }
+
+        // Define the event handlers.
+        private static void OnChanged(object source, FileSystemEventArgs e)
+        {
+            // Specify what is done when a file is changed, created, or deleted.
+
+            if (Form1.main.createremove) Form1.main.appendText("Filechange detected: " + e.FullPath + " " + e.ChangeType);
+           
+        }
+
+        private static void OnRenamed(object source, RenamedEventArgs e)
+        {
+
+            // Specify what is done when a file is renamed.
+           // Console.WriteLine("File: {0} renamed to {1}", e.OldFullPath, e.FullPath);
+           if(Form1.main.createremove) Form1.main.appendText("Filechange detected:" + e.OldFullPath + " renamed to "+e.FullPath);
+        }
+
+        private void button14_Click(object sender, EventArgs e)
+        {
+            if (createremove)
+            {
+                appendText("----- Listen to Create/Remove stopped -----");
+                // stop
+
+                createremove = false;
+                button14.BackColor = Color.Red;
+            }
+            else
+            {
+                appendText("----- Listen to Create/Remove active -----");
+                createremove = true;
+                button14.BackColor = Color.Green;
+                // start
+                FileSysHook(this);
+
+            }
+        }
+
+        private void button18_Click(object sender, EventArgs e)
+        {
+            if (preformance)
+            {
+                appendText("----- Listen to Preformance Check stopped -----");
+                // stop
+                PreformanceThread.Abort();
+                timer1.Stop();
+               
+
+                preformance = false;
+                button18.BackColor = Color.Red;
+            }
+            else
+            {
+                appendText("----- Listen to Preformance Check active -----");
+                preformance = true;
+                button18.BackColor = Color.Green;
+                // start
+                PreformanceThread = new Thread(new ThreadStart(pcc.start));
+                PreformanceThread.IsBackground = true;
+                timer1.Start();
+                PreformanceThread.Start();
+
+            }
+        }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+
+
+        private void timer3_Tick(object sender, EventArgs e)
+        {
+            elapsedTime = DateTime.Now - StartTime;
+          
         }
     }
 
